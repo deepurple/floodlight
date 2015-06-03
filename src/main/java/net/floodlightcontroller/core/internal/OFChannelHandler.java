@@ -62,7 +62,7 @@ class OFChannelHandler extends IdleStateAwareChannelHandler {
 	private Channel channel;
 	private final Timer timer;
 	private volatile OFChannelState state;
-	private OFFactory factory = OFFactories.getFactory(OFVersion.OF_13);
+	private OFFactory factory = OFFactories.getFactory(OFVersion.OF_14);
 	private OFFeaturesReply featuresReply;
 	private volatile OFConnection connection;
 	private final IDebugCounterService debugCounters;
@@ -253,6 +253,13 @@ class OFChannelHandler extends IdleStateAwareChannelHandler {
 				case EXPERIMENTER:
 					processOFExperimenter((OFExperimenter)m);
 					break;
+				/* echos can be sent at any time */
+				case ECHO_REPLY:
+					processOFEchoReply((OFEchoReply)m);
+					break;
+				case ECHO_REQUEST:
+					processOFEchoRequest((OFEchoRequest)m);
+					break;
 				default:
 					illegalMessageReceived(m);
 					break;
@@ -260,8 +267,6 @@ class OFChannelHandler extends IdleStateAwareChannelHandler {
 			}
 			else{
 				switch(m.getType()){
-				// Always handle echos at the channel level!
-				// Echos should only be sent in the complete.
 				case ECHO_REPLY:
 					processOFEchoReply((OFEchoReply)m);
 					break;
@@ -301,7 +306,11 @@ class OFChannelHandler extends IdleStateAwareChannelHandler {
 		@Override
 		void processOFHello(OFHello m) throws IOException {
 			OFVersion version = m.getVersion();
-			factory = OFFactories.getFactory(version);
+			/* Choose the lower of the two supported versions. */
+			if (version.compareTo(factory.getVersion()) < 0) {
+				factory = OFFactories.getFactory(version);
+			} /* else The controller's version is < or = the switch's, so keep original controller factory. */
+			
 			OFMessageDecoder decoder = pipeline.get(OFMessageDecoder.class);
 			decoder.setVersion(version);
 			setState(new WaitFeaturesReplyState());
